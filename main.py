@@ -111,17 +111,85 @@ async def naver_login(username: str, password: str):
         logger.info("로그인 폼 요소 찾는 중...")
         
         # 로그인 폼이 로드될 때까지 대기
-        await page.wait_for_selector("#id", timeout=10000)
-        await page.wait_for_selector("#pw", timeout=10000)
+        logger.info("로그인 폼 요소 찾는 중...")
+        
+        # 아이디 입력 필드 찾기 (실제 확인된 셀렉터 우선)
+        id_selectors = [
+            "#input_item_id",  # 실제 확인된 셀렉터
+            "#id", 
+            "input[name='id']", 
+            "input[placeholder*='아이디']", 
+            "input[placeholder*='ID']", 
+            "[data-testid='id']"
+        ]
+        id_field = None
+        
+        for selector in id_selectors:
+            try:
+                field = await page.query_selector(selector)
+                if field:
+                    is_visible = await field.is_visible()
+                    if is_visible:
+                        id_field = field
+                        logger.info(f"✅ 아이디 필드 찾음: {selector}")
+                        break
+            except Exception as e:
+                logger.warning(f"아이디 필드 셀렉터 {selector} 실패: {str(e)}")
+                continue
+        
+        if not id_field:
+            logger.error("❌ 아이디 입력 필드를 찾을 수 없습니다")
+            return LoginResponse(success=False, message="아이디 입력 필드를 찾을 수 없습니다")
+        
+        # 비밀번호 입력 필드 찾기 (실제 확인된 셀렉터 우선)
+        pw_selectors = [
+            "#input_item_pw",  # 실제 확인된 셀렉터
+            "#pw", 
+            "input[name='pw']", 
+            "input[type='password']", 
+            "input[placeholder*='비밀번호']", 
+            "input[placeholder*='Password']", 
+            "[data-testid='pw']"
+        ]
+        pw_field = None
+        
+        for selector in pw_selectors:
+            try:
+                field = await page.query_selector(selector)
+                if field:
+                    is_visible = await field.is_visible()
+                    if is_visible:
+                        pw_field = field
+                        logger.info(f"✅ 비밀번호 필드 찾음: {selector}")
+                        break
+            except Exception as e:
+                logger.warning(f"비밀번호 필드 셀렉터 {selector} 실패: {str(e)}")
+                continue
+        
+        if not pw_field:
+            logger.error("❌ 비밀번호 입력 필드를 찾을 수 없습니다")
+            return LoginResponse(success=False, message="비밀번호 입력 필드를 찾을 수 없습니다")
         
         # 아이디 입력
         logger.info("아이디 입력 중...")
-        await page.fill("#id", username)
+        await id_field.clear()  # 기존 값 지우기
+        await id_field.fill(username)
+        
+        # 입력값 확인
+        id_value = await id_field.input_value()
+        logger.info(f"아이디 입력 확인: '{id_value}' (길이: {len(id_value)})")
+        
         await asyncio.sleep(1)
         
         # 비밀번호 입력
         logger.info("비밀번호 입력 중...")
-        await page.fill("#pw", password)
+        await pw_field.clear()  # 기존 값 지우기
+        await pw_field.fill(password)
+        
+        # 입력값 확인 (비밀번호는 보안상 길이만)
+        pw_value = await pw_field.input_value()
+        logger.info(f"비밀번호 입력 확인: 길이 {len(pw_value)}")
+        
         await asyncio.sleep(1)
         
         # 로그인 버튼 클릭
