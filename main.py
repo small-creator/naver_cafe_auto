@@ -113,81 +113,41 @@ async def naver_login(username: str, password: str):
         # 로그인 폼이 로드될 때까지 대기
         logger.info("로그인 폼 요소 찾는 중...")
         
-        # 아이디 입력 필드 찾기 (실제 확인된 셀렉터 우선)
-        id_selectors = [
-            "#input_item_id",  # 실제 확인된 셀렉터
-            "#id", 
-            "input[name='id']", 
-            "input[placeholder*='아이디']", 
-            "input[placeholder*='ID']", 
-            "[data-testid='id']"
-        ]
-        id_field = None
+        # 로그인 폼 대기
+        await page.wait_for_selector("#frmNIDLogin", timeout=10000)
         
-        for selector in id_selectors:
-            try:
-                field = await page.query_selector(selector)
-                if field:
-                    is_visible = await field.is_visible()
-                    if is_visible:
-                        id_field = field
-                        logger.info(f"✅ 아이디 필드 찾음: {selector}")
-                        break
-            except Exception as e:
-                logger.warning(f"아이디 필드 셀렉터 {selector} 실패: {str(e)}")
-                continue
-        
-        if not id_field:
-            logger.error("❌ 아이디 입력 필드를 찾을 수 없습니다")
-            return LoginResponse(success=False, message="아이디 입력 필드를 찾을 수 없습니다")
-        
-        # 비밀번호 입력 필드 찾기 (실제 확인된 셀렉터 우선)
-        pw_selectors = [
-            "#input_item_pw",  # 실제 확인된 셀렉터
-            "#pw", 
-            "input[name='pw']", 
-            "input[type='password']", 
-            "input[placeholder*='비밀번호']", 
-            "input[placeholder*='Password']", 
-            "[data-testid='pw']"
-        ]
-        pw_field = None
-        
-        for selector in pw_selectors:
-            try:
-                field = await page.query_selector(selector)
-                if field:
-                    is_visible = await field.is_visible()
-                    if is_visible:
-                        pw_field = field
-                        logger.info(f"✅ 비밀번호 필드 찾음: {selector}")
-                        break
-            except Exception as e:
-                logger.warning(f"비밀번호 필드 셀렉터 {selector} 실패: {str(e)}")
-                continue
-        
-        if not pw_field:
-            logger.error("❌ 비밀번호 입력 필드를 찾을 수 없습니다")
-            return LoginResponse(success=False, message="비밀번호 입력 필드를 찾을 수 없습니다")
-        
-        # 아이디 입력
+        # 아이디 입력 (정확한 셀렉터 사용)
         logger.info("아이디 입력 중...")
-        await id_field.clear()  # 기존 값 지우기
-        await id_field.fill(username)
+        await page.wait_for_selector("#id", timeout=5000)
+        
+        # 아이디 필드 클릭 후 입력
+        await page.click("#id")
+        await asyncio.sleep(0.5)
+        
+        # 기존 값 지우고 새 값 입력
+        await page.fill("#id", "")  # 기존 값 지우기
+        await page.type("#id", username, delay=100)  # 천천히 타이핑
         
         # 입력값 확인
-        id_value = await id_field.input_value()
+        id_value = await page.input_value("#id")
         logger.info(f"아이디 입력 확인: '{id_value}' (길이: {len(id_value)})")
         
         await asyncio.sleep(1)
         
-        # 비밀번호 입력
+        # 비밀번호 입력 (정확한 셀렉터 사용)
         logger.info("비밀번호 입력 중...")
-        await pw_field.clear()  # 기존 값 지우기
-        await pw_field.fill(password)
+        await page.wait_for_selector("#pw", timeout=5000)
+        
+        # 비밀번호 필드 클릭 후 입력
+        await page.click("#pw")
+        await asyncio.sleep(0.5)
+        
+        # 기존 값 지우고 새 값 입력
+        await page.fill("#pw", "")  # 기존 값 지우기
+        await page.type("#pw", password, delay=100)  # 천천히 타이핑
         
         # 입력값 확인 (비밀번호는 보안상 길이만)
-        pw_value = await pw_field.input_value()
+        pw_value = await page.input_value("#pw")
         logger.info(f"비밀번호 입력 확인: 길이 {len(pw_value)}")
         
         await asyncio.sleep(1)
@@ -195,15 +155,14 @@ async def naver_login(username: str, password: str):
         # 로그인 버튼 클릭
         logger.info("로그인 버튼 클릭...")
         
-        # 여러 가능한 로그인 버튼 셀렉터 시도 (실제 확인된 셀렉터 우선)
+        # 정확한 로그인 버튼 셀렉터 (페이지 소스 기준)
         login_button_selectors = [
-            "#frmNIDLogin > ul > li > div > div:nth-child(11)",  # 실제 확인된 셀렉터
-            "#log\\.login",  # 기존 셀렉터
-            ".btn_login",    # 클래스 기반
-            "[type='submit']", # submit 버튼
-            "input[value='로그인']", # value 기반
-            ".btn_global", # 다른 가능한 클래스
-            "button[type='button']", # 일반 버튼
+            "#log\\.login",  # 정확한 셀렉터 (점이 있음)
+            "button#log\\.login",  # 더 구체적
+            ".btn_login.off.next_step",  # 클래스 기반
+            "#frmNIDLogin .btn_login",  # 폼 내 로그인 버튼
+            "button:has-text('다음')",  # 텍스트 기반
+            "[id='log.login']",  # 속성 기반
         ]
         
         login_clicked = False
@@ -223,7 +182,7 @@ async def naver_login(username: str, password: str):
                     except:
                         logger.info(f"버튼 셀렉터 {selector}: 존재함, 보임={is_visible}, 활성화={is_enabled}")
                     
-                    if is_visible and is_enabled:
+                    if is_visible:  # 활성화 상태와 관계없이 클릭 시도
                         await button.click()
                         logger.info(f"✅ 로그인 버튼 클릭 성공: {selector}")
                         login_clicked = True
