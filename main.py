@@ -126,7 +126,22 @@ async def naver_login(username: str, password: str):
         
         # 기존 값 지우고 새 값 입력
         await page.fill("#id", "")  # 기존 값 지우기
-        await page.type("#id", username, delay=100)  # 천천히 타이핑
+        await asyncio.sleep(0.3)
+        
+        # 천천히 타이핑하면서 각 키마다 이벤트 발생
+        for char in username:
+            await page.type("#id", char, delay=150)
+            await asyncio.sleep(0.1)
+        
+        # JavaScript 이벤트 트리거
+        await page.evaluate("""
+            const idField = document.querySelector('#id');
+            if (idField) {
+                idField.dispatchEvent(new Event('input', { bubbles: true }));
+                idField.dispatchEvent(new Event('change', { bubbles: true }));
+                idField.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+        """)
         
         # 입력값 확인
         id_value = await page.input_value("#id")
@@ -144,13 +159,29 @@ async def naver_login(username: str, password: str):
         
         # 기존 값 지우고 새 값 입력
         await page.fill("#pw", "")  # 기존 값 지우기
-        await page.type("#pw", password, delay=100)  # 천천히 타이핑
+        await asyncio.sleep(0.3)
+        
+        # 천천히 타이핑하면서 각 키마다 이벤트 발생
+        for char in password:
+            await page.type("#pw", char, delay=150)
+            await asyncio.sleep(0.1)
+        
+        # JavaScript 이벤트 트리거
+        await page.evaluate("""
+            const pwField = document.querySelector('#pw');
+            if (pwField) {
+                pwField.dispatchEvent(new Event('input', { bubbles: true }));
+                pwField.dispatchEvent(new Event('change', { bubbles: true }));
+                pwField.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+        """)
         
         # 입력값 확인 (비밀번호는 보안상 길이만)
         pw_value = await page.input_value("#pw")
         logger.info(f"비밀번호 입력 확인: 길이 {len(pw_value)}")
         
-        await asyncio.sleep(1)
+        # 입력 완료 후 잠시 대기 (네이버 검증 시간)
+        await asyncio.sleep(2)
         
         # 로그인 버튼 클릭
         logger.info("로그인 버튼 클릭...")
