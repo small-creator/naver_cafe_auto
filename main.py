@@ -96,10 +96,16 @@ async def naver_login(username: str, password: str):
     try:
         playwright, browser = await connect_to_browserless()
         
-        # 새 컨텍스트와 페이지 생성
+        # 새 컨텍스트와 페이지 생성 (더 자연스러운 브라우저 설정)
         context = await browser.new_context(
-            viewport={'width': 1280, 'height': 720},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            locale='ko-KR',
+            timezone_id='Asia/Seoul',
+            extra_http_headers={
+                'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+            }
         )
         page = await context.new_page()
         
@@ -116,72 +122,63 @@ async def naver_login(username: str, password: str):
         # 로그인 폼 대기
         await page.wait_for_selector("#frmNIDLogin", timeout=10000)
         
-        # 아이디 입력 (정확한 셀렉터 사용)
+        # 아이디 입력 (완전히 새로운 방식)
         logger.info("아이디 입력 중...")
         await page.wait_for_selector("#id", timeout=5000)
         
-        # 아이디 필드 클릭 후 입력
-        await page.click("#id")
+        # 1. 필드 포커스
+        await page.focus("#id")
         await asyncio.sleep(0.5)
         
-        # 기존 값 지우고 새 값 입력
-        await page.fill("#id", "")  # 기존 값 지우기
-        await asyncio.sleep(0.3)
+        # 2. 기존 값 완전 삭제
+        await page.keyboard.press("Control+A")
+        await page.keyboard.press("Delete")
+        await asyncio.sleep(0.5)
         
-        # 천천히 타이핑하면서 각 키마다 이벤트 발생
-        for char in username:
-            await page.type("#id", char, delay=150)
-            await asyncio.sleep(0.1)
+        # 3. 실제 사람처럼 천천히 타이핑 (각 문자마다 랜덤 지연)
+        for i, char in enumerate(username):
+            await page.keyboard.type(char)
+            # 랜덤 지연 (100-300ms)
+            import random
+            delay = random.randint(100, 300)
+            await asyncio.sleep(delay / 1000)
         
-        # JavaScript 이벤트 트리거
-        await page.evaluate("""
-            const idField = document.querySelector('#id');
-            if (idField) {
-                idField.dispatchEvent(new Event('input', { bubbles: true }));
-                idField.dispatchEvent(new Event('change', { bubbles: true }));
-                idField.dispatchEvent(new Event('blur', { bubbles: true }));
-            }
-        """)
+        # 4. Tab 키로 다음 필드로 이동 (자연스러운 사용자 행동)
+        await asyncio.sleep(0.5)
         
         # 입력값 확인
         id_value = await page.input_value("#id")
         logger.info(f"아이디 입력 확인: '{id_value}' (길이: {len(id_value)})")
         
-        await asyncio.sleep(1)
-        
-        # 비밀번호 입력 (정확한 셀렉터 사용)
+        # 비밀번호 입력 (완전히 새로운 방식)
         logger.info("비밀번호 입력 중...")
-        await page.wait_for_selector("#pw", timeout=5000)
         
-        # 비밀번호 필드 클릭 후 입력
-        await page.click("#pw")
+        # 1. Tab 키로 비밀번호 필드로 이동하거나 직접 포커스
+        await page.keyboard.press("Tab")
         await asyncio.sleep(0.5)
         
-        # 기존 값 지우고 새 값 입력
-        await page.fill("#pw", "")  # 기존 값 지우기
-        await asyncio.sleep(0.3)
+        # 또는 직접 포커스
+        await page.focus("#pw")
+        await asyncio.sleep(0.5)
         
-        # 천천히 타이핑하면서 각 키마다 이벤트 발생
-        for char in password:
-            await page.type("#pw", char, delay=150)
-            await asyncio.sleep(0.1)
+        # 2. 기존 값 완전 삭제
+        await page.keyboard.press("Control+A")
+        await page.keyboard.press("Delete")
+        await asyncio.sleep(0.5)
         
-        # JavaScript 이벤트 트리거
-        await page.evaluate("""
-            const pwField = document.querySelector('#pw');
-            if (pwField) {
-                pwField.dispatchEvent(new Event('input', { bubbles: true }));
-                pwField.dispatchEvent(new Event('change', { bubbles: true }));
-                pwField.dispatchEvent(new Event('blur', { bubbles: true }));
-            }
-        """)
+        # 3. 실제 사람처럼 천천히 타이핑
+        for i, char in enumerate(password):
+            await page.keyboard.type(char)
+            # 랜덤 지연 (100-300ms)
+            delay = random.randint(100, 300)
+            await asyncio.sleep(delay / 1000)
         
         # 입력값 확인 (비밀번호는 보안상 길이만)
         pw_value = await page.input_value("#pw")
         logger.info(f"비밀번호 입력 확인: 길이 {len(pw_value)}")
         
-        # 입력 완료 후 잠시 대기 (네이버 검증 시간)
-        await asyncio.sleep(2)
+        # 입력 완료 후 잠시 대기
+        await asyncio.sleep(3)
         
         # 로그인 버튼 클릭
         logger.info("로그인 버튼 클릭...")
