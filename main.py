@@ -28,9 +28,57 @@ async def connect_to_browserless():
     
     playwright = await async_playwright().start()
     
-    # Browserless 서비스에 연결
-    browser = await playwright.chromium.connect_over_cdp(browserless_url)
-    return playwright, browser
+    try:
+        logger.info(f"Browserless 연결 시도: {browserless_url}")
+        
+        # 다양한 연결 방식 시도
+        connection_urls = []
+        
+        if browserless_url.startswith('http'):
+            # HTTP URL인 경우 WebSocket으로 변환하여 여러 엔드포인트 시도
+            ws_base = browserless_url.replace('http', 'ws')
+            connection_urls = [
+                f"{ws_base}/playwright",
+                f"{ws_base}",
+                browserless_url  # 원본 HTTP URL도 시도
+            ]
+        elif browserless_url.startswith('ws'):
+            # WebSocket URL인 경우
+            if '/playwright' in browserless_url:
+                connection_urls = [browserless_url]
+            else:
+                connection_urls = [
+                    f"{browserless_url}/playwright",
+                    browserless_url
+                ]
+        
+        last_error = None
+        for url in connection_urls:
+            try:
+                logger.info(f"연결 시도 중: {url}")
+                
+                if url.startswith('ws'):
+                    # WebSocket 연결
+                    browser = await playwright.chromium.connect_over_cdp(url)
+                else:
+                    # HTTP 연결 (일부 Browserless 서비스는 HTTP도 지원)
+                    browser = await playwright.chromium.connect_over_cdp(url.replace('http', 'ws'))
+                
+                logger.info(f"연결 성공: {url}")
+                return playwright, browser
+                
+            except Exception as e:
+                logger.warning(f"연결 실패 ({url}): {str(e)}")
+                last_error = e
+                continue
+        
+        # 모든 연결 시도 실패
+        raise last_error or Exception("모든 연결 시도 실패")
+        
+    except Exception as e:
+        logger.error(f"Browserless 연결 실패: {str(e)}")
+        await playwright.stop()
+        raise e
 
 async def naver_login(username: str, password: str):
     """네이버 로그인 수행"""
