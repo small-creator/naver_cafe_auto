@@ -150,27 +150,64 @@ async def naver_login(username: str, password: str):
             current_url = page.url
             logger.warning(f"로그인 후 URL: {current_url}")
             
+            # 페이지 제목도 확인
+            try:
+                page_title = await page.title()
+                logger.info(f"페이지 제목: {page_title}")
+            except:
+                pass
+            
+            # 오류 메시지 확인
+            try:
+                error_elements = await page.query_selector_all(".error_msg, .help_text, .alert")
+                for element in error_elements:
+                    error_text = await element.inner_text()
+                    if error_text.strip():
+                        logger.warning(f"페이지 오류 메시지: {error_text}")
+            except:
+                pass
+            
+            # 현재 페이지의 스크린샷 정보 (URL만)
+            logger.info(f"현재 페이지 상태 - URL: {current_url}")
+            
             # 캡차나 추가 인증이 필요한 경우 체크
-            if "captcha" in current_url or "verify" in current_url:
+            if "captcha" in current_url.lower() or "verify" in current_url.lower():
                 return LoginResponse(
                     success=False,
                     message="캡차 또는 추가 인증이 필요합니다"
                 )
             elif "nidlogin.login" in current_url:
+                # 로그인 페이지에 그대로 있음 - 로그인 실패
                 return LoginResponse(
                     success=False,
                     message="로그인에 실패했습니다. 아이디/비밀번호를 확인해주세요"
+                )
+            elif "nid.naver.com" in current_url:
+                # 네이버 인증 관련 페이지
+                return LoginResponse(
+                    success=False,
+                    message="추가 인증이 필요합니다. 수동으로 인증을 완료해주세요"
                 )
             else:
                 # 다른 페이지로 이동했을 수 있음 (성공적일 수도 있음)
                 cookies = await context.cookies()
                 cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
                 
-                return LoginResponse(
-                    success=True,
-                    message="로그인 완료 (다른 페이지로 이동됨)",
-                    cookies=cookie_dict
-                )
+                # 쿠키에 로그인 관련 정보가 있는지 확인
+                login_cookies = ['NID_AUT', 'NID_SES', 'NID_JKL']
+                has_login_cookies = any(cookie_name in cookie_dict for cookie_name in login_cookies)
+                
+                if has_login_cookies:
+                    return LoginResponse(
+                        success=True,
+                        message=f"로그인 성공 (현재 URL: {current_url})",
+                        cookies=cookie_dict
+                    )
+                else:
+                    return LoginResponse(
+                        success=False,
+                        message=f"로그인 상태 불확실 (현재 URL: {current_url})"
+                    )
     
     except Exception as e:
         logger.error(f"로그인 처리 중 오류 발생: {str(e)}")
