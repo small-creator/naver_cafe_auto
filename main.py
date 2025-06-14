@@ -126,7 +126,59 @@ async def naver_login(username: str, password: str):
         
         # 로그인 버튼 클릭
         logger.info("로그인 버튼 클릭...")
-        await page.click("#log\\.login")
+        
+        # 여러 가능한 로그인 버튼 셀렉터 시도 (실제 확인된 셀렉터 우선)
+        login_button_selectors = [
+            "#frmNIDLogin > ul > li > div > div:nth-child(11)",  # 실제 확인된 셀렉터
+            "#log\\.login",  # 기존 셀렉터
+            ".btn_login",    # 클래스 기반
+            "[type='submit']", # submit 버튼
+            "input[value='로그인']", # value 기반
+            ".btn_global", # 다른 가능한 클래스
+            "button[type='button']", # 일반 버튼
+        ]
+        
+        login_clicked = False
+        for selector in login_button_selectors:
+            try:
+                # 버튼이 존재하는지 확인
+                button = await page.query_selector(selector)
+                if button:
+                    # 버튼이 보이고 클릭 가능한지 확인
+                    is_visible = await button.is_visible()
+                    is_enabled = await button.is_enabled()
+                    
+                    # 버튼의 텍스트도 확인
+                    try:
+                        button_text = await button.inner_text()
+                        logger.info(f"버튼 셀렉터 {selector}: 존재함, 보임={is_visible}, 활성화={is_enabled}, 텍스트='{button_text}'")
+                    except:
+                        logger.info(f"버튼 셀렉터 {selector}: 존재함, 보임={is_visible}, 활성화={is_enabled}")
+                    
+                    if is_visible and is_enabled:
+                        await button.click()
+                        logger.info(f"✅ 로그인 버튼 클릭 성공: {selector}")
+                        login_clicked = True
+                        break
+            except Exception as e:
+                logger.warning(f"버튼 셀렉터 {selector} 시도 실패: {str(e)}")
+                continue
+        
+        if not login_clicked:
+            logger.error("❌ 모든 로그인 버튼 셀렉터 실패")
+            # Enter 키로 로그인 시도
+            try:
+                await page.press("#pw", "Enter")
+                logger.info("Enter 키로 로그인 시도")
+                login_clicked = True
+            except Exception as e:
+                logger.error(f"Enter 키 시도도 실패: {str(e)}")
+        
+        if not login_clicked:
+            return LoginResponse(
+                success=False,
+                message="로그인 버튼을 찾을 수 없습니다"
+            )
         
         # 로그인 결과 대기 (최대 15초)
         try:
@@ -157,15 +209,37 @@ async def naver_login(username: str, password: str):
             except:
                 pass
             
-            # 오류 메시지 확인
+            # 오류 메시지 확인 (더 자세히)
             try:
-                error_elements = await page.query_selector_all(".error_msg, .help_text, .alert")
-                for element in error_elements:
-                    error_text = await element.inner_text()
-                    if error_text.strip():
-                        logger.warning(f"페이지 오류 메시지: {error_text}")
-            except:
-                pass
+                # 다양한 오류 메시지 셀렉터 확인
+                error_selectors = [
+                    ".error_msg",
+                    ".help_text", 
+                    ".alert",
+                    ".err",
+                    "#err_common",
+                    ".login_error",
+                    "[class*='error']",
+                    "[class*='err']"
+                ]
+                
+                error_found = False
+                for selector in error_selectors:
+                    elements = await page.query_selector_all(selector)
+                    for element in elements:
+                        try:
+                            error_text = await element.inner_text()
+                            if error_text and error_text.strip():
+                                logger.warning(f"페이지 오류 메시지 ({selector}): {error_text.strip()}")
+                                error_found = True
+                        except:
+                            pass
+                
+                if not error_found:
+                    logger.info("명시적인 오류 메시지를 찾을 수 없음")
+                    
+            except Exception as e:
+                logger.warning(f"오류 메시지 확인 중 예외: {str(e)}")
             
             # 현재 페이지의 스크린샷 정보 (URL만)
             logger.info(f"현재 페이지 상태 - URL: {current_url}")
