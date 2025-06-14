@@ -31,19 +31,57 @@ async def connect_to_browserless():
     try:
         logger.info(f"Browserless 연결 시도: {browserless_url}")
         
-        # CDP over WebSocket 연결
-        browser = await playwright.chromium.connect_over_cdp(browserless_url)
-        logger.info(f"✅ Browserless 연결 성공!")
+        # WebSocket URL을 HTTP URL로 변환하여 다른 방식으로 연결 시도
+        if browserless_url.startswith('wss://'):
+            # WebSocket URL을 HTTP로 변환
+            http_url = browserless_url.replace('wss://', 'https://').replace('/playwright', '')
+            
+            # 다양한 연결 방식 시도
+            connection_options = [
+                # 원본 WebSocket 연결
+                browserless_url,
+                # HTTP 기반 연결
+                f"{http_url}/json/version",
+                # 다른 엔드포인트들
+                browserless_url.replace('/playwright', '/chromium'),
+                browserless_url.replace('?token=', '/websocket?token='),
+            ]
+        else:
+            connection_options = [browserless_url]
         
-        # 브라우저 상태 확인을 위해 컨텍스트 생성 테스트
-        try:
-            context = await browser.new_context()
-            await context.close()
-            logger.info("✅ 브라우저 컨텍스트 테스트 성공")
-        except Exception as e:
-            logger.warning(f"브라우저 컨텍스트 테스트 실패: {str(e)}")
+        last_error = None
+        for url in connection_options:
+            try:
+                logger.info(f"연결 시도 중: {url}")
+                
+                # 간단한 브라우저 연결 시도
+                browser = await playwright.chromium.connect_over_cdp(url)
+                
+                # 연결 후 간단한 테스트
+                try:
+                    # 브라우저 정보 대신 페이지 생성으로 테스트
+                    page = await browser.new_page()
+                    await page.close()
+                    logger.info(f"✅ Browserless 연결 및 테스트 성공: {url}")
+                    return playwright, browser
+                except Exception as test_error:
+                    logger.warning(f"브라우저 테스트 실패: {str(test_error)}")
+                    # 테스트 실패해도 브라우저 객체는 반환 (사용 가능할 수 있음)
+                    logger.info(f"✅ Browserless 기본 연결 성공: {url}")
+                    return playwright, browser
+                
+            except Exception as e:
+                logger.warning(f"❌ 연결 실패 ({url}): {str(e)}")
+                last_error = e
+                try:
+                    if 'browser' in locals():
+                        await browser.close()
+                except:
+                    pass
+                continue
         
-        return playwright, browser
+        # 모든 연결 시도 실패
+        raise last_error or Exception("모든 연결 시도 실패")
         
     except Exception as e:
         logger.error(f"Browserless 연결 실패: {str(e)}")
