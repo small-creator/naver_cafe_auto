@@ -96,7 +96,7 @@ async def naver_login(username: str, password: str):
     try:
         playwright, browser = await connect_to_browserless()
         
-        # 새 컨텍스트와 페이지 생성 (더 자연스러운 브라우저 설정)
+        # 새 컨텍스트와 페이지 생성 (봇 탐지 회피)
         context = await browser.new_context(
             viewport={'width': 1920, 'height': 1080},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -104,15 +104,32 @@ async def naver_login(username: str, password: str):
             timezone_id='Asia/Seoul',
             extra_http_headers={
                 'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-            }
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1'
+            },
+            # 자바스크립트 활성화 및 이미지 로드
+            java_script_enabled=True,
         )
         page = await context.new_page()
         
         logger.info("네이버 로그인 페이지로 이동 중...")
         
-        # 네이버 로그인 페이지로 이동
+        # 먼저 네이버 메인 페이지 방문 (자연스러운 사용자 행동)
+        await page.goto("https://www.naver.com", wait_until="networkidle")
+        await asyncio.sleep(2)
+        
+        # 그 다음 로그인 페이지로 이동
         await page.goto("https://nid.naver.com/nidlogin.login", wait_until="networkidle")
+        
+        # 페이지 로드 후 잠시 대기 (자연스러운 사용자 행동)
+        await asyncio.sleep(3)
         
         logger.info("로그인 폼 요소 찾는 중...")
         
@@ -126,25 +143,31 @@ async def naver_login(username: str, password: str):
         logger.info("아이디 입력 중...")
         await page.wait_for_selector("#id", timeout=5000)
         
+        # 자연스러운 마우스 움직임
+        await page.mouse.move(100, 100)
+        await asyncio.sleep(0.5)
+        await page.mouse.move(500, 300)
+        await asyncio.sleep(0.3)
+        
         # 1. 필드 포커스
         await page.focus("#id")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1)
         
         # 2. 기존 값 완전 삭제
         await page.keyboard.press("Control+A")
         await page.keyboard.press("Delete")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.8)
         
         # 3. 실제 사람처럼 천천히 타이핑 (각 문자마다 랜덤 지연)
         for i, char in enumerate(username):
             await page.keyboard.type(char)
-            # 랜덤 지연 (100-300ms)
+            # 랜덤 지연 (200-500ms) - 더 느리게
             import random
-            delay = random.randint(100, 300)
+            delay = random.randint(200, 500)
             await asyncio.sleep(delay / 1000)
         
         # 4. Tab 키로 다음 필드로 이동 (자연스러운 사용자 행동)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.5)
         
         # 입력값 확인
         id_value = await page.input_value("#id")
@@ -153,32 +176,36 @@ async def naver_login(username: str, password: str):
         # 비밀번호 입력 (완전히 새로운 방식)
         logger.info("비밀번호 입력 중...")
         
+        # 자연스러운 마우스 움직임
+        await page.mouse.move(300, 400)
+        await asyncio.sleep(0.4)
+        
         # 1. Tab 키로 비밀번호 필드로 이동하거나 직접 포커스
         await page.keyboard.press("Tab")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1)
         
         # 또는 직접 포커스
         await page.focus("#pw")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.8)
         
         # 2. 기존 값 완전 삭제
         await page.keyboard.press("Control+A")
         await page.keyboard.press("Delete")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.8)
         
         # 3. 실제 사람처럼 천천히 타이핑
         for i, char in enumerate(password):
             await page.keyboard.type(char)
-            # 랜덤 지연 (100-300ms)
-            delay = random.randint(100, 300)
+            # 랜덤 지연 (200-500ms) - 더 느리게
+            delay = random.randint(200, 500)
             await asyncio.sleep(delay / 1000)
         
         # 입력값 확인 (비밀번호는 보안상 길이만)
         pw_value = await page.input_value("#pw")
         logger.info(f"비밀번호 입력 확인: 길이 {len(pw_value)}")
         
-        # 입력 완료 후 잠시 대기
-        await asyncio.sleep(3)
+        # 입력 완료 후 더 오래 대기
+        await asyncio.sleep(5)
         
         # 로그인 버튼 클릭
         logger.info("로그인 버튼 클릭...")
